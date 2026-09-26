@@ -4,160 +4,223 @@
 #define PREFETCH_DEGREE 3
 #define MASK_IP 0xFF
 #define STRIDE_ARRAY_SIZE 16
+#define MAX_CONFIDENCE 5
 
 class IP_TRACKER {
-  public:
-    // the IP we're tracking
-    uint64_t ip;
+public:
+  bool valid;
+  // the IP we're tracking
+  uint64_t ip;
 
-    // the last address accessed by this IP
-    uint64_t last_cl_addr;
+  // the last address accessed by this IP
+  uint64_t last_cl_addr;
 
-    int64_t stride_array[STRIDE_ARRAY_SIZE];
-    int64_t num_iterations;
-    int64_t curr_index;
-    int64_t size;
+  int64_t stride_array[STRIDE_ARRAY_SIZE];
+  int64_t last_stride;
+  int64_t confidence;
+  int64_t num_iterations;
+  int64_t curr_index;
+  int64_t size;
 
-    // use LRU to evict old IP trackers
-    uint32_t lru;
+  // use LRU to evict old IP trackers
+  uint32_t lru;
 
-    IP_TRACKER () {
-        ip = 0;
-        last_cl_addr = 0;
-        for (int i = 0; i < STRIDE_ARRAY_SIZE; i++) {
-            stride_array[i] = 0;
-        }
-        num_iterations = 0;
-        curr_index = 0;
-        size = 0;
-        lru = 0;
-    };
+  IP_TRACKER() {
+    valid = false;
+    ip = 0;
+    last_cl_addr = 0;
+    for (int i = 0; i < STRIDE_ARRAY_SIZE; i++) {
+      stride_array[i] = 0;
+    }
+    last_stride = 0;
+    confidence = 0;
+    num_iterations = 0;
+    curr_index = 0;
+    size = 0;
+    lru = 0;
+  };
 };
 
 IP_TRACKER trackers[IP_TRACKER_COUNT];
 
-void CACHE::l1d_prefetcher_initialize()
-{
-    std::cout << "------------------------------------------------" << std::endl;
-    std::cout << "        Stride Pattern Prefetcher (SPP)         " << std::endl;
-    std::cout << "------------------------------------------------" << std::endl;
+void CACHE::l1d_prefetcher_initialize() {
+  std::cout << "------------------------------------------------" << std::endl;
+  std::cout << "        Stride Pattern Prefetcher (SPP)         " << std::endl;
+  std::cout << "------------------------------------------------" << std::endl;
 
-    for (int i = 0; i < IP_TRACKER_COUNT; i++)
-        trackers[i].lru = i;
+  for (int i = 0; i < IP_TRACKER_COUNT; i++)
+    trackers[i].lru = i;
 }
 
-void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint8_t critical_ip_flag)
-{
-    uint64_t cl_addr = addr >> LOG2_BLOCK_SIZE;
+void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
+                                   uint8_t cache_hit, uint8_t type,
+                                   uint8_t critical_ip_flag) {
+  uint64_t cl_addr = addr >> LOG2_BLOCK_SIZE;
 
-    ip = ip & MASK_IP;
+  ip = ip & MASK_IP;
 
-    int index = -1;
+  int index = -1;
+  for (index = 0; index < IP_TRACKER_COUNT; index++) {
+    if (trackers[index].valid && trackers[index].ip == ip)
+      break;
+  }
+
+  if (index == IP_TRACKER_COUNT) {
     for (index = 0; index < IP_TRACKER_COUNT; index++) {
-        if (trackers[index].ip == ip)
-            break;
+      if (trackers[index].lru == (IP_TRACKER_COUNT - 1))
+        break;
     }
 
-    if (index == IP_TRACKER_COUNT) {
-        for (index = 0; index < IP_TRACKER_COUNT; index++) {
-            if (trackers[index].lru == (IP_TRACKER_COUNT - 1))
-                break;
-        }
-
-        trackers[index].ip = ip;
-        trackers[index].last_cl_addr = cl_addr;
-
-        for (int i=0; i<IP_TRACKER_COUNT; i++) {
-            if (trackers[i].lru < trackers[index].lru)
-                trackers[i].lru++;
-        }
-        trackers[index].lru = 0;
-
-        return;
-    }
-
-    if (index == -1)
-        assert(0);
-
-    int64_t stride = 0;
-    if (cl_addr > trackers[index].last_cl_addr) {
-        stride = cl_addr - trackers[index].last_cl_addr;
-    } else {
-        stride = trackers[index].last_cl_addr - cl_addr;
-        stride *= -1;
-    }
-
-    if (stride == 0)
-        return;
-
-    int64_t &curr_index = trackers[index].curr_index;
-    int64_t &num_iterations = trackers[index].num_iterations;
-    int64_t &size = trackers[index].size;
-
-    if (size > 0 && stride == trackers[index].stride_array[curr_index]) {
-        uint64_t prefetch_stride_index = (curr_index + 1) % size;
-        uint64_t pf_address_prefix = cl_addr;
-
-        for (int i=0; i<PREFETCH_DEGREE; i++) {
-            pf_address_prefix += trackers[index].stride_array[prefetch_stride_index];
-            uint64_t pf_address = pf_address_prefix << LOG2_BLOCK_SIZE;
-
-            if ((pf_address >> LOG2_PAGE_SIZE) != (addr >> LOG2_PAGE_SIZE))
-                break;
-
-            if (MSHR.occupancy < (MSHR.SIZE>>1))
-              prefetch_line(ip, addr, pf_address, FILL_L1, 0);
-            else
-              prefetch_line(ip, addr, pf_address, FILL_L2, 0);
-
-            prefetch_stride_index = (prefetch_stride_index + 1) % size;
-        }
-    }
-
+    trackers[index].ip = ip;
     trackers[index].last_cl_addr = cl_addr;
-    if (size == 0) {
-        size = 1;
-        trackers[index].stride_array[0] = stride;
-        curr_index = 0;
-        num_iterations = 0;
-    } else {
-        if (stride != trackers[index].stride_array[curr_index]) {
-            if (num_iterations == 0) {
-                trackers[index].stride_array[size] = stride;
-                size = (size + 1) % MAX_STRIDE_SIZE;
-            } else {
-                // copy the array (num_iterations -1) times and add the prefix before curr_index to the end and add the current stride at the end
 
-                for (int i=0; i<num_iterations-1; i++) {
-                    for (int j=0; j<size; j++) {
-                        trackers[index].stride_array[(i*size)+j] = trackers[index].stride_array[j];
-                    }
-                }
-                for (int j=0; j<curr_index; j++) {
-                    trackers[index].stride_array[(num_iterations-1)*size+j] = trackers[index].stride_array[j];
-                }
-                trackers[index].stride_array[(num_iterations-1)*size+curr_index] = stride;
-                size = (num_iterations * size + curr_index) % MAX_STRIDE_SIZE;
-                curr_index = (num_iterations * size + curr_index) % MAX_STRIDE_SIZE;
-            }
-        } else {
-            curr_index = (curr_index + 1) % size;
-            if (curr_index == 0) {
-                num_iterations++;
-            }
-        }
-        trackers[index].lru = 0;
-        return;
+    for (int i = 0; i < IP_TRACKER_COUNT; i++) {
+      if (trackers[i].lru < trackers[index].lru)
+        trackers[i].lru++;
     }
+
+    trackers[index].valid = true;
+    trackers[index].lru = 0;
+    trackers[index].size = 0;
+    trackers[index].curr_index = 0;
+    trackers[index].num_iterations = 0;
+    trackers[index].last_stride = 0;
+    trackers[index].confidence = 0;
+    return;
+  }
+
+  if (index == -1)
+    assert(0);
+
+  int64_t stride = 0;
+  if (cl_addr > trackers[index].last_cl_addr) {
+    stride = cl_addr - trackers[index].last_cl_addr;
+  } else {
+    stride = trackers[index].last_cl_addr - cl_addr;
+    stride *= -1;
+  }
+
+  if (stride == 0)
+    return;
+
+  int64_t &curr_index = trackers[index].curr_index;
+  int64_t &num_iterations = trackers[index].num_iterations;
+  int64_t &size = trackers[index].size;
+  auto &pattern = trackers[index].stride_array;
+
+  auto &tracker = trackers[index];
+  if (stride == tracker.last_stride) {
+    if (tracker.confidence < MAX_CONFIDENCE)
+      ++tracker.confidence;
+  } else {
+    tracker.confidence = 0;
+  }
+  tracker.last_stride = stride;
+  if (tracker.confidence == MAX_CONFIDENCE) {
+    for (int i = 0; i < PREFETCH_DEGREE; i++) {
+      uint64_t pf_address = (cl_addr + (stride * (i + 1))) << LOG2_BLOCK_SIZE;
+
+      // only issue a prefetch if the prefetch address is in the same 4 KB page
+      // as the current demand access address
+      if ((pf_address >> LOG2_PAGE_SIZE) != (addr >> LOG2_PAGE_SIZE))
+        break;
+
+      // check the MSHR occupancy to decide if we're going to prefetch to the L1
+      // or L2
+      if (MSHR.occupancy < (MSHR.SIZE >> 1))
+        prefetch_line(ip, addr, pf_address, FILL_L1, 0);
+      else
+        prefetch_line(ip, addr, pf_address, FILL_L2, 0);
+    }
+  } else if (size > 0 && stride == pattern[curr_index]) {
+    uint64_t prefetch_stride_index = (curr_index + 1) % size;
+    uint64_t pf_address_prefix = cl_addr;
+
+    for (int i = 0; i < PREFETCH_DEGREE; i++) {
+      pf_address_prefix += pattern[prefetch_stride_index];
+      uint64_t pf_address = pf_address_prefix << LOG2_BLOCK_SIZE;
+
+      if ((pf_address >> LOG2_PAGE_SIZE) != (addr >> LOG2_PAGE_SIZE))
+        break;
+
+      if (MSHR.occupancy < (MSHR.SIZE >> 1))
+        prefetch_line(ip, addr, pf_address, FILL_L1, 0);
+      else
+        prefetch_line(ip, addr, pf_address, FILL_L2, 0);
+
+      prefetch_stride_index = (prefetch_stride_index + 1) % size;
+    }
+  }
+
+  trackers[index].last_cl_addr = cl_addr;
+  if (size == 0) {
+    size = 1;
+    pattern[0] = stride;
+    curr_index = 0;
+    num_iterations = 0;
+  } else {
+    if (stride != pattern[curr_index]) {
+      if (num_iterations == 0) {
+        if (size == STRIDE_ARRAY_SIZE) {
+          size = 1;
+          pattern[0] = stride;
+          curr_index = 0;
+          num_iterations = 0;
+        } else {
+          pattern[size++] = stride;
+        }
+      } else {
+        // num_iterations counts repetitions started. Exclude an unfinished
+        // repetition; its matched prefix is appended separately below.
+        const int64_t completed = num_iterations - (curr_index != 0 ? 1 : 0);
+        const int64_t required = size + completed * size + curr_index + 1;
+
+        if (required > STRIDE_ARRAY_SIZE) {
+          size = 1;
+          pattern[0] = stride;
+          curr_index = 0;
+          num_iterations = 0;
+        } else {
+          int64_t expansion_index = size;
+          for (int64_t i = 0; i < completed; i++) {
+            for (int j = 0; j < size; j++) {
+              pattern[expansion_index++] = pattern[j];
+            }
+          }
+          for (int j = 0; j < curr_index; j++) {
+            pattern[expansion_index++] = pattern[j];
+          }
+          pattern[expansion_index++] = stride;
+          size = expansion_index;
+          curr_index = 0;
+          num_iterations = 0;
+        }
+      }
+    } else {
+      if (curr_index == 0 && num_iterations < STRIDE_ARRAY_SIZE) {
+        num_iterations++;
+      }
+      curr_index = (curr_index + 1) % size;
+    }
+  }
+
+  for (int i = 0; i < IP_TRACKER_COUNT; i++) {
+    if (trackers[i].lru < trackers[index].lru)
+      trackers[i].lru++;
+  }
+  trackers[index].lru = 0;
+  return;
 }
 
-void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t v_evicted_addr, uint64_t evicted_addr, uint32_t metadata_in)
-{
-	return; //metadata_in;
+void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr,
+                                      uint32_t set, uint32_t way,
+                                      uint8_t prefetch, uint64_t v_evicted_addr,
+                                      uint64_t evicted_addr,
+                                      uint32_t metadata_in) {
+  return; // metadata_in;
 }
 
-void CACHE::l1d_prefetcher_final_stats()
-{
-    cout << "CPU" << cpu << " L1D SPP final stats" << endl;
-    cout << "Degree: " << PREFETCH_DEGREE << endl;
+void CACHE::l1d_prefetcher_final_stats() {
+  cout << "CPU" << cpu << " L1D SPP final stats" << endl;
+  cout << "Degree: " << PREFETCH_DEGREE << endl;
 }
