@@ -8,7 +8,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+DATA_DIR = os.path.join(ROOT, "data", "task2a")
+RESULTS_DIR = os.path.join(ROOT, "results", "task2")
+PLOTS_DIR = os.path.join(ROOT, "plots", "task2a")
 POLICIES = [("lru", "LRU"), ("rrip", "SRRIP"), ("irrip_moderate", "iRRIP-Moderate"),
             ("irrip", "iRRIP")]
 TRACES = [1, 2, 3]
@@ -57,11 +60,11 @@ header = ["Trace", "Policy"] + [label for _, label, _ in METRICS]
 
 table = "\n".join(["| " + " | ".join(header) + " |", "|---|---|" + "---:|" * len(METRICS)]
                   + ["| " + " | ".join(r) + " |" for r in rows])
-with open(os.path.join(DATA_DIR, "results.md"), "w") as f:
+with open(os.path.join(RESULTS_DIR, "results_2a.md"), "w") as f:
     f.write("# L2C replacement policy comparison (25M warmup + 25M sim)\n\n" + table + "\n")
 print(table)
 
-with open(os.path.join(DATA_DIR, "results.csv"), "w", newline="") as f:
+with open(os.path.join(RESULTS_DIR, "results_2a.csv"), "w", newline="") as f:
     w = csv.writer(f)
     w.writerow(header)
     w.writerows(rows)
@@ -102,6 +105,6 @@ fig.legend(handles, names, loc="upper right", ncol=len(POLICIES), frameon=False,
 fig.suptitle("L2C replacement: LRU vs SRRIP vs iRRIP variants (25M warmup + 25M sim)", x=0.01, ha="left",
              fontsize=13, color="#0b0b0b")
 fig.tight_layout(rect=(0, 0, 1, 0.97))
-out = os.path.join(DATA_DIR, "results.png")
+out = os.path.join(PLOTS_DIR, "results.png")
 fig.savefig(out, dpi=150, facecolor="#fcfcfb")
 print("wrote", out)

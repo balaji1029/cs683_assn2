@@ -1,0 +1,181 @@
+#include "cache.h"
+
+#define maxRRPV 3
+uint32_t l2_rrpv[L2C_SET][L2C_WAY];
+
+#define NUM_LEADERS 32
+#define LEADER_STRIDE (L2C_SET / NUM_LEADERS)
+#define DECISION_INTERVAL 4096  // SRRIP-leader accesses between policy decisions
+#define THRESH_INIT 0.5
+#define THRESH_STEP 0.05
+#define THRESH_MIN 0.1
+#define THRESH_MAX 0.9
+
+// SRRIP leaders measure the ratio; both leader groups' misses steer the threshold
+static inline bool is_rrip_leader(uint32_t set) { return set % LEADER_STRIDE == 0; }
+static inline bool is_irrip_leader(uint32_t set) { return set % LEADER_STRIDE == 1; }
+
+static uint64_t instr_acc = 0;
+static uint64_t instr_miss = 0;
+static uint64_t total_acc = 0;
+static uint64_t total_miss = 0;
+
+static uint64_t rrip_leader_miss = 0;
+static uint64_t irrip_leader_miss = 0;
+
+static double thresh = THRESH_INIT;
+static bool use_irrip = false;
+
+static inline void count_leader_miss(uint32_t set, uint32_t type, uint8_t hit)
+{
+    if (hit || type == WRITEBACK)
+        return;
+    if (is_rrip_leader(set)) rrip_leader_miss++;
+    else irrip_leader_miss++;
+}
+
+static inline void update_ratio(uint32_t type, uint8_t hit, uint8_t isInstruction)
+{
+    if (type == WRITEBACK)
+        return;
+
+    total_acc++;
+    if (!hit) total_miss++;
+    if (isInstruction) {
+        instr_acc++;
+        if (!hit) instr_miss++;
+    }
+
+    if (total_acc % DECISION_INTERVAL == 0) {
+        // move the threshold towards whichever leader group missed less this interval
+        if (irrip_leader_miss < rrip_leader_miss) thresh -= THRESH_STEP;
+        else if (irrip_leader_miss > rrip_leader_miss) thresh += THRESH_STEP;
+        if (thresh < THRESH_MIN) thresh = THRESH_MIN;
+        if (thresh > THRESH_MAX) thresh = THRESH_MAX;
+
+        double ratio = (double)(instr_acc + instr_miss) / (total_acc + total_miss);
+        use_irrip = ratio > thresh;
+
+        cout << "DYN_ADAPT ratio: " << ratio << " thresh: " << thresh
+             << " rrip_leader_miss: " << rrip_leader_miss << " irrip_leader_miss: " << irrip_leader_miss
+             << " use_irrip: " << use_irrip << endl;
+
+        rrip_leader_miss = irrip_leader_miss = 0;
+    }
+}
+
+static inline uint32_t find_victim_irrip(CACHE* cache, uint32_t set)
+{
+    while (1)
+    {
+        int instr_victim = -1;
+
+        for (int i=0; i<L2C_WAY; i++){
+            if (l2_rrpv[set][i] == maxRRPV){
+                if (cache->block[set][i].instruction) {
+                    if (instr_victim < 0) instr_victim = i;
+                }
+                else {
+                    return i; // this is a data victim, preferrably get rid of it
+                }
+            }
+        }
+        if (instr_victim >= 0) return instr_victim;
+
+        for (int i=0; i<L2C_WAY; i++)
+            l2_rrpv[set][i]++;
+    }
+}
+
+static inline uint32_t find_victim_rrip(uint32_t set)
+{
+    while (1)
+    {
+        for (int i=0; i<L2C_WAY; i++)
+            if (l2_rrpv[set][i] == maxRRPV)
+                return i;
+
+        for (int i=0; i<L2C_WAY; i++)
+            l2_rrpv[set][i]++;
+    }
+}
+
+static inline void update_replacement_state_irrip(uint32_t set, uint32_t way, uint32_t type, uint8_t hit, uint8_t isInstruction)
+{
+    if (hit){
+        if (isInstruction){
+            l2_rrpv[set][way] = 0;
+        }
+        else if (type != WRITEBACK && l2_rrpv[set][way] > 0){
+            l2_rrpv[set][way]--; // for data, gradually promote it, but don't promote writeback hits, because they don't signal reuse really
+        }
+    }
+    else{
+        if (isInstruction){
+            l2_rrpv[set][way] = maxRRPV - 2; // gives more leeway for instructions
+        }
+        else if (type == WRITEBACK || type == PREFETCH){
+            l2_rrpv[set][way] = maxRRPV; // only data is written back, and this is slightly deprioritizing data more
+        }
+        else{
+            l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+        }
+    }
+}
+
+static inline void update_replacement_state_rrip(uint32_t set, uint32_t way, uint8_t hit)
+{
+    if (hit)
+        l2_rrpv[set][way] = 0;
+    else
+        l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+}
+
+// initialize replacement state
+void CACHE::l2c_initialize_replacement()
+{
+    cout << "Initialize adaptive-threshold dynamic iRRIP state for L2C" << endl;
+
+    for (int i=0; i<L2C_SET; i++) {
+        for (int j=0; j<L2C_WAY; j++) {
+            l2_rrpv[i][j] = maxRRPV;
+        }
+    }
+}
+
+// find replacement victim
+uint32_t CACHE::l2c_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type)
+{
+    if (is_rrip_leader(set))
+        return find_victim_rrip(set);
+    if (is_irrip_leader(set))
+        return find_victim_irrip(this, set);
+    return use_irrip ? find_victim_irrip(this, set) : find_victim_rrip(set);
+}
+
+// called on every cache hit and cache fill
+void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit, uint8_t isInstruction)
+{
+    if ((type == WRITEBACK) && ip)
+        assert(0);
+
+    if (is_rrip_leader(set)) {
+        count_leader_miss(set, type, hit);
+        update_ratio(type, hit, isInstruction);
+        update_replacement_state_rrip(set, way, hit);
+    }
+    else if (is_irrip_leader(set)) {
+        count_leader_miss(set, type, hit);
+        update_replacement_state_irrip(set, way, type, hit, isInstruction);
+    }
+    else if (use_irrip)
+        update_replacement_state_irrip(set, way, type, hit, isInstruction);
+    else
+        update_replacement_state_rrip(set, way, hit);
+}
+
+// use this function to print out your own stats at the end of simulation
+void CACHE::l2c_replacement_final_stats()
+{
+
+}
