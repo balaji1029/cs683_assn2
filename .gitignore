@@ -1,0 +1,6 @@
+.vscode
+bin
+obj
+traces
+compile_flags.txt
+.DS_Store
