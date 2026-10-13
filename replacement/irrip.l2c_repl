@@ -82,19 +82,16 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
         if (isInstruction){
             l2_rrpv[set][way] = 0;
         }
-        else if (type != WRITEBACK && l2_rrpv[set][way] > 0){
-            l2_rrpv[set][way]--; // for data, gradually promote it, but don't promote writeback hits, because they don't signal reuse really
+        else {
+            l2_rrpv[set][way] = 1; 
         }
     }
     else{
         if (isInstruction){
-            l2_rrpv[set][way] = maxRRPV - 2; // gives more leeway for instructions
+            l2_rrpv[set][way] = maxRRPV - 1; 
         }
-        else if (type == WRITEBACK || type == PREFETCH){
-            l2_rrpv[set][way] = maxRRPV; // only data is written back, and this is slightly deprioritizing data more
-        }
-        else{
-            l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+        else {
+            l2_rrpv[set][way] = maxRRPV;  
         }
     }
 }
