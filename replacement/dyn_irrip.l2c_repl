@@ -7,7 +7,7 @@ uint32_t l2_rrpv[L2C_SET][L2C_WAY];
 
 #define NUM_LEADERS 32
 #define LEADER_STRIDE (L2C_SET / NUM_LEADERS)
-#define DECISION_INTERVAL 4096  
+#define DECISION_INTERVAL 8192
 #define INSTR_THRESH 0.3
 
 static inline bool is_leader(uint32_t set) { 
@@ -101,7 +101,7 @@ static inline void update_replacement_state_irrip(uint32_t set, uint32_t way, ui
         if (isInstruction){
             l2_rrpv[set][way] = 0;
         }
-        else if (type != WRITEBACK && l2_rrpv[set][way] > 0){
+        else if (type != WRITEBACK && type != PREFETCH && l2_rrpv[set][way] > 0){
             l2_rrpv[set][way]--; // for data, gradually promote it, but don't promote writeback hits, because they don't signal reuse really
         }
     }
@@ -118,12 +118,18 @@ static inline void update_replacement_state_irrip(uint32_t set, uint32_t way, ui
     }
 }
 
-static inline void update_replacement_state_rrip(uint32_t set, uint32_t way, uint8_t hit)
+static inline void update_replacement_state_rrip(uint32_t set, uint32_t way, uint32_t type, uint8_t hit)
 {
-    if (hit)
-        l2_rrpv[set][way] = 0;
-    else
-        l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+    if (hit) {
+        if (type != WRITEBACK && type != PREFETCH)
+            l2_rrpv[set][way] = 0;
+    }
+    else {
+          if (type == WRITEBACK || type == PREFETCH)
+              l2_rrpv[set][way] = maxRRPV; // only data is written back, and this is slightly deprioritizing data more
+          else
+              l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+    }
 }
 
 void CACHE::l2c_initialize_replacement()
@@ -151,12 +157,12 @@ void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
 
     if (is_leader(set)) {
         update_ratio(type, hit, isInstruction);
-        update_replacement_state_rrip(set, way, hit);
+        update_replacement_state_rrip(set, way, type, hit);
     }
     else if (use_irrip)
         update_replacement_state_irrip(set, way, type, hit, isInstruction);
     else
-        update_replacement_state_rrip(set, way, hit);
+        update_replacement_state_rrip(set, way, type, hit);
 }
 
 void CACHE::l2c_replacement_final_stats()
