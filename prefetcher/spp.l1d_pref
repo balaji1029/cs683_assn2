@@ -8,17 +8,19 @@
 
 class IP_TRACKER {
 public:
-  bool valid;
-  uint8_t ip;
-  uint64_t last_cl_addr;
+  bool valid; // shows the validity of the element
+  uint8_t ip; // ip address of the line
+  uint64_t last_cl_addr; // last accessed address
 
-  int64_t stride_array[STRIDE_ARRAY_SIZE];
-  int64_t last_stride;
-  int8_t confidence;
-  int8_t non_uniform_confidence;
-  int16_t num_iterations;
-  int8_t curr_index;
-  int8_t size;
+  int64_t stride_array[STRIDE_ARRAY_SIZE]; // array that stores the non-uniform stride in the last accesses as a heuristic
+  int8_t curr_index; // current index (defines the last slot last accessed)
+  int8_t size; // size of the stride_array
+
+  int64_t last_stride; // last stride accessed
+  int16_t num_iterations; // number of iterations
+
+  int8_t confidence; // confidence for the uniform behaviour, as to if last few strides are the same
+  int8_t non_uniform_confidence; //confidence for the non-uniform pattern
 
   uint32_t lru;
 
@@ -105,18 +107,20 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
   if (stride == 0)
     return;
 
+  // get the references to the elements for code clarity
+  auto &pattern = trackers[index].stride_array;
   auto &curr_index = trackers[index].curr_index;
   auto &num_iterations = trackers[index].num_iterations;
   auto &size = trackers[index].size;
-  auto &pattern = trackers[index].stride_array;
-
   auto &tracker = trackers[index];
 
+  // resolved prefetches for accuracy calculation
   const uint64_t resolved = pf_useful + pf_useless;
   if (resolved < last_resolved_prefetches || pf_useful < last_useful_prefetches) {
     last_resolved_prefetches = resolved;
     last_useful_prefetches = pf_useful;
   }
+  // update every 128 prefetches, to it's accuracy
   if (resolved - last_resolved_prefetches >= 128) {
     const double accuracy =
         double(pf_useful - last_useful_prefetches) /
@@ -131,13 +135,16 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
 
   if (stride == tracker.last_stride) {
     if (tracker.confidence < MAX_CONFIDENCE)
-      ++tracker.confidence;
+      ++tracker.confidence; // increase confidence if the stride was same as last stride
   } else {
     tracker.confidence = 0;
   }
   tracker.last_stride = stride;
 
-  const bool pattern_matches = size > 0 && stride == pattern[curr_index];
+  // pattern with stride array matches
+  const bool pattern_matches = (size > 0) && (stride == pattern[curr_index]);
+
+  // increase the non-uniform confidence
   if (pattern_matches) {
     if (tracker.non_uniform_confidence < MAX_CONFIDENCE)
       ++tracker.non_uniform_confidence;
@@ -145,7 +152,7 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
     tracker.non_uniform_confidence = 0;
   }
 
-  if (tracker.confidence >= 1) {
+  if (tracker.confidence >= 1) { // if the uniform confidence is high, make make uniform prefetches according to the confidence limits
     const int degree = min<int>(PREFETCH_DEGREE + tracker.confidence,
                                 accuracy_degree_limit);
     for (int i = 0; i < degree; i++) {
@@ -160,7 +167,7 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
         prefetch_line(ip, addr, pf_address, FILL_L2, 0);
     }
   }
-  if (pattern_matches) {
+  if (pattern_matches) { // if the pattern matches, make non-uniform prefetches to the confidence limits
     const int degree = min<int>(PREFETCH_DEGREE + tracker.non_uniform_confidence,
                                 accuracy_degree_limit);
     uint64_t prefetch_stride_index = (curr_index + 1) % size;
@@ -189,6 +196,11 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
     curr_index = 0;
     num_iterations = 0;
   } else {
+  	// if the stride access doesn't follow the pattern, we have to repeat
+   	// the array num_iterations times and add the new access to get the
+    // new stride pattern
+    // if the stride array is full, I take it as the first access - kinda
+    // lossy but I take the trade-off
     if (stride != pattern[curr_index]) {
       if (num_iterations == 0) {
         if (size == STRIDE_ARRAY_SIZE) {
