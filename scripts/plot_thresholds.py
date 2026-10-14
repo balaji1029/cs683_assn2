@@ -58,15 +58,26 @@ for runs in [lru, irrip, rrip] + list(dyn.values()):
         s["instr_red_pct"] = (1 - s["l2c_instr"] / lru[t]["l2c_instr"]) * 100
         s["data_red_pct"] = (1 - s["l2c_data"] / lru[t]["l2c_data"]) * 100
 
+header_2b = ["Trace", "Policy", "IPC"] + [label for _, label, _, _ in METRICS] \
+            + ["Instr. MPKI Reduction vs LRU (%)", "Data MPKI Reduction vs LRU (%)"]
+all_rows_2b = []
+
 with open(os.path.join(RESULTS_DIR, "results_2b.csv"), "w", newline="") as f:
     w = csv.writer(f)
-    w.writerow(["Trace", "Policy", "IPC"] + [label for _, label, _, _ in METRICS]
-               + ["Instr. MPKI Reduction vs LRU (%)", "Data MPKI Reduction vs LRU (%)"])
+    w.writerow(header_2b)
     for t in TRACES:
         rows = [("SRRIP", rrip[t]), ("iRRIP", irrip[t])] + [(f"dyn_iRRIP (thresh {th})", dyn[th][t]) for th in THRESHOLDS]
         for name, s in rows:
-            w.writerow([f"Trace{t}", name, f"{s['ipc']:.4f}"] + [fmt.format(s[key]) for key, _, fmt, _ in METRICS]
-                       + [f"{s['instr_red_pct']:.2f}", f"{s['data_red_pct']:.2f}"])
+            row_vals = [f"Trace{t}", name, f"{s['ipc']:.4f}"] + [fmt.format(s[key]) for key, _, fmt, _ in METRICS] \
+                       + [f"{s['instr_red_pct']:.2f}", f"{s['data_red_pct']:.2f}"]
+            w.writerow(row_vals)
+            all_rows_2b.append(row_vals)
+
+table_2b = "\n".join(["| " + " | ".join(header_2b) + " |", "|---|---|" + "---:|" * (len(header_2b) - 2)]
+                     + ["| " + " | ".join(r) + " |" for r in all_rows_2b])
+with open(os.path.join(RESULTS_DIR, "results_2b.md"), "w") as f:
+    f.write("# Task 2B: Dynamic I-RRIP Threshold Sensitivity Study (25M warmup + 25M sim)\n\n" + table_2b + "\n")
+print("wrote results_2b.csv and results_2b.md")
 
 plt.rcParams.update({"font.size": 11, "axes.spines.top": False, "axes.spines.right": False,
                      "axes.edgecolor": "#8a8984", "axes.labelcolor": INK2,

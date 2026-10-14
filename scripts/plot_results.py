@@ -98,7 +98,7 @@ for ax, (key, title) in zip(axes.flat, PLOTS):
         vals = [stats[p][t][key] for p, _ in POLICIES for t in TRACES]
         ax.set_ylim(min(vals) - 0.01, max(vals) + 0.01)
     if key == "l2c_load_norm":
-        ax.set_ylim(0.7, 1.12)
+        ax.set_ylim(0.65, 1.12)
 
 handles, names = axes.flat[0].get_legend_handles_labels()
 fig.legend(handles, names, loc="upper right", ncol=len(POLICIES), frameon=False, fontsize=11)
