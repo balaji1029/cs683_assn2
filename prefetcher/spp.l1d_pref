@@ -4,25 +4,22 @@
 #define PREFETCH_DEGREE 3
 #define MASK_IP 0xFF
 #define STRIDE_ARRAY_SIZE 16
-#define MAX_CONFIDENCE 5
+#define MAX_CONFIDENCE 3
 
 class IP_TRACKER {
 public:
   bool valid;
-  // the IP we're tracking
-  uint64_t ip;
-
-  // the last address accessed by this IP
+  uint8_t ip;
   uint64_t last_cl_addr;
 
   int64_t stride_array[STRIDE_ARRAY_SIZE];
   int64_t last_stride;
-  int64_t confidence;
-  int64_t num_iterations;
-  int64_t curr_index;
-  int64_t size;
+  int8_t confidence;
+  int8_t non_uniform_confidence;
+  int16_t num_iterations;
+  int8_t curr_index;
+  int8_t size;
 
-  // use LRU to evict old IP trackers
   uint32_t lru;
 
   IP_TRACKER() {
@@ -34,6 +31,7 @@ public:
     }
     last_stride = 0;
     confidence = 0;
+    non_uniform_confidence = 0;
     num_iterations = 0;
     curr_index = 0;
     size = 0;
@@ -42,13 +40,16 @@ public:
 };
 
 IP_TRACKER trackers[IP_TRACKER_COUNT];
+uint64_t last_resolved_prefetches = 0;
+uint64_t last_useful_prefetches = 0;
+uint8_t accuracy_degree_limit = 6;
 
 void CACHE::l1d_prefetcher_initialize() {
   std::cout << "------------------------------------------------" << std::endl;
   std::cout << "        Stride Pattern Prefetcher (SPP)         " << std::endl;
   std::cout << "------------------------------------------------" << std::endl;
 
-  for (int i = 0; i < IP_TRACKER_COUNT; i++)
+  for (int8_t i = 0; i < IP_TRACKER_COUNT; i++)
     trackers[i].lru = i;
 }
 
@@ -59,7 +60,7 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
 
   ip = ip & MASK_IP;
 
-  int index = -1;
+  int8_t index = -1;
   for (index = 0; index < IP_TRACKER_COUNT; index++) {
     if (trackers[index].valid && trackers[index].ip == ip)
       break;
@@ -86,6 +87,7 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
     trackers[index].num_iterations = 0;
     trackers[index].last_stride = 0;
     trackers[index].confidence = 0;
+    trackers[index].non_uniform_confidence = 0;
     return;
   }
 
@@ -103,12 +105,30 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
   if (stride == 0)
     return;
 
-  int64_t &curr_index = trackers[index].curr_index;
-  int64_t &num_iterations = trackers[index].num_iterations;
-  int64_t &size = trackers[index].size;
+  auto &curr_index = trackers[index].curr_index;
+  auto &num_iterations = trackers[index].num_iterations;
+  auto &size = trackers[index].size;
   auto &pattern = trackers[index].stride_array;
 
   auto &tracker = trackers[index];
+
+  const uint64_t resolved = pf_useful + pf_useless;
+  if (resolved < last_resolved_prefetches || pf_useful < last_useful_prefetches) {
+    last_resolved_prefetches = resolved;
+    last_useful_prefetches = pf_useful;
+  }
+  if (resolved - last_resolved_prefetches >= 128) {
+    const double accuracy =
+        double(pf_useful - last_useful_prefetches) /
+        (resolved - last_resolved_prefetches);
+    if (accuracy < 0.25 && accuracy_degree_limit > PREFETCH_DEGREE)
+      --accuracy_degree_limit;
+    else if (accuracy > 0.50 && accuracy_degree_limit < PREFETCH_DEGREE + MAX_CONFIDENCE)
+      ++accuracy_degree_limit;
+    last_resolved_prefetches = resolved;
+    last_useful_prefetches = pf_useful;
+  }
+
   if (stride == tracker.last_stride) {
     if (tracker.confidence < MAX_CONFIDENCE)
       ++tracker.confidence;
@@ -116,27 +136,37 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
     tracker.confidence = 0;
   }
   tracker.last_stride = stride;
-  if (tracker.confidence == MAX_CONFIDENCE) {
-    for (int i = 0; i < PREFETCH_DEGREE; i++) {
+
+  const bool pattern_matches = size > 0 && stride == pattern[curr_index];
+  if (pattern_matches) {
+    if (tracker.non_uniform_confidence < MAX_CONFIDENCE)
+      ++tracker.non_uniform_confidence;
+  } else {
+    tracker.non_uniform_confidence = 0;
+  }
+
+  if (tracker.confidence >= 1) {
+    const int degree = min<int>(PREFETCH_DEGREE + tracker.confidence,
+                                accuracy_degree_limit);
+    for (int i = 0; i < degree; i++) {
       uint64_t pf_address = (cl_addr + (stride * (i + 1))) << LOG2_BLOCK_SIZE;
 
-      // only issue a prefetch if the prefetch address is in the same 4 KB page
-      // as the current demand access address
       if ((pf_address >> LOG2_PAGE_SIZE) != (addr >> LOG2_PAGE_SIZE))
         break;
 
-      // check the MSHR occupancy to decide if we're going to prefetch to the L1
-      // or L2
       if (MSHR.occupancy < (MSHR.SIZE >> 1))
         prefetch_line(ip, addr, pf_address, FILL_L1, 0);
       else
         prefetch_line(ip, addr, pf_address, FILL_L2, 0);
     }
-  } else if (size > 0 && stride == pattern[curr_index]) {
+  }
+  if (pattern_matches) {
+    const int degree = min<int>(PREFETCH_DEGREE + tracker.non_uniform_confidence,
+                                accuracy_degree_limit);
     uint64_t prefetch_stride_index = (curr_index + 1) % size;
     uint64_t pf_address_prefix = cl_addr;
 
-    for (int i = 0; i < PREFETCH_DEGREE; i++) {
+    for (int i = 0; i < degree; i++) {
       pf_address_prefix += pattern[prefetch_stride_index];
       uint64_t pf_address = pf_address_prefix << LOG2_BLOCK_SIZE;
 
@@ -170,8 +200,6 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip,
           pattern[size++] = stride;
         }
       } else {
-        // num_iterations counts repetitions started. Exclude an unfinished
-        // repetition; its matched prefix is appended separately below.
         const int64_t completed = num_iterations - (curr_index != 0 ? 1 : 0);
         const int64_t required = size + completed * size + curr_index + 1;
 
@@ -222,5 +250,7 @@ void CACHE::l1d_prefetcher_cache_fill(uint64_t v_addr, uint64_t addr,
 
 void CACHE::l1d_prefetcher_final_stats() {
   cout << "CPU" << cpu << " L1D SPP final stats" << endl;
-  cout << "Degree: " << PREFETCH_DEGREE << endl;
+  cout << "Degree budget: " << PREFETCH_DEGREE << " + predictor confidence (0-"
+       << MAX_CONFIDENCE << "), accuracy limit: " << int(accuracy_degree_limit)
+       << endl;
 }

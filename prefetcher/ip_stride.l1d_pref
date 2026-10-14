@@ -1,6 +1,5 @@
 #include "cache.h"
 
-
 #define IP_TRACKER_COUNT 24
 #define PREFETCH_DEGREE 3
 #define MASK_IP 0xFF
@@ -30,7 +29,7 @@ class IP_TRACKER {
 IP_TRACKER trackers[IP_TRACKER_COUNT];
 
 
-void CACHE::l1d_prefetcher_initialize() 
+void CACHE::l1d_prefetcher_initialize()
 {
 	cout << "CPU " << cpu << " L1D IP-based stride prefetcher" << endl;
 	for (int i=0; i<IP_TRACKER_COUNT; i++)
@@ -64,7 +63,7 @@ void CACHE::l1d_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit
         trackers[index].last_stride = 0;
 
         //cout << "[IP_STRIDE] MISS index: " << index << " lru: " << trackers[index].lru << " ip: " << hex << ip << " cl_addr: " << cl_addr << dec << endl;
-	for (int i=0; i<IP_TRACKER_COUNT; i++) {
+        for (int i=0; i<IP_TRACKER_COUNT; i++) {
             if (trackers[i].lru < trackers[index].lru)
                 trackers[i].lru++;
         }
