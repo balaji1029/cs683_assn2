@@ -1,6 +1,5 @@
 #include "cache.h"
-#include "memory_class.h"
-#include <cstdint>
+#include <iostream>
 
 #define maxRRPV 3
 uint32_t l2_rrpv[L2C_SET][L2C_WAY];
@@ -11,49 +10,45 @@ uint32_t l2_rrpv[L2C_SET][L2C_WAY];
 #define INSTR_THRESH 0.3
 
 static inline bool is_leader(uint32_t set) { 
-    return set % LEADER_STRIDE == 0; 
+    return (set % LEADER_STRIDE == 0);
 }
 
-static uint64_t instr_acc = 0;
-static uint64_t instr_miss = 0;
-static uint64_t total_acc = 0;
-static uint64_t total_miss = 0;
+static uint64_t leader_instr_acc = 0;
+static uint64_t leader_instr_miss = 0;
+static uint64_t leader_total_acc = 0;
+static uint64_t leader_total_miss = 0;
 static uint64_t since_decision = 0;
 
 static bool use_irrip = false;
-
-static uint64_t total_num_intervals = 0;
-static uint64_t num_irrip_intervals = 0;
-static uint64_t num_switches = 0;
+static uint64_t total_intervals = 0;
+static uint64_t irrip_intervals = 0;
 
 static inline void update_ratio(uint32_t type, uint8_t hit, uint8_t isInstruction)
 {
     if (type == WRITEBACK)
         return;
 
-    total_acc++;
+    leader_total_acc++;
     since_decision++;
-    if (!hit) total_miss++;
+    if (!hit) leader_total_miss++;
     if (isInstruction) {
-        instr_acc++;
-        if (!hit) instr_miss++;
+        leader_instr_acc++;
+        if (!hit) leader_instr_miss++;
     }
 
     if (since_decision >= DECISION_INTERVAL) {
-        double ratio = (double)(instr_acc + instr_miss) / (total_acc + total_miss);
-        bool next = ratio > INSTR_THRESH;
-        if (next != use_irrip) num_switches++;
+        double ratio = (double)(leader_instr_acc + leader_instr_miss) / (leader_total_acc + leader_total_miss);
+        bool next = (ratio > INSTR_THRESH);
         use_irrip = next;
 
-        total_num_intervals++;
-        if (use_irrip) 
-            num_irrip_intervals++;
+        total_intervals++;
+        if (use_irrip) irrip_intervals++;
 
         // multiply the counters by 0.9 to give less weight to history
-        instr_acc = (uint64_t)(instr_acc * 0.9);
-        instr_miss = (uint64_t)(instr_miss * 0.9);
-        total_acc = (uint64_t)(total_acc * 0.9);
-        total_miss = (uint64_t)(total_miss * 0.9);
+        leader_instr_acc = (uint64_t)(leader_instr_acc * 0.9);
+        leader_instr_miss = (uint64_t)(leader_instr_miss * 0.9);
+        leader_total_acc = (uint64_t)(leader_total_acc * 0.9);
+        leader_total_miss = (uint64_t)(leader_total_miss * 0.9);
 
         since_decision = 0; // so that a change happens every DECISION_INTERVAL cycles as intended
     }
@@ -76,10 +71,14 @@ static inline uint32_t find_victim_irrip(CACHE* cache, uint32_t set)
             }
         }
         if (instr_victim >= 0) return instr_victim;
-
+            
         for (int i=0; i<L2C_WAY; i++)
             l2_rrpv[set][i]++;
     }
+
+    // WE SHOULD NOT REACH HERE
+    assert(0);
+    return 0;
 }
 
 static inline uint32_t find_victim_rrip(uint32_t set)
@@ -101,19 +100,16 @@ static inline void update_replacement_state_irrip(uint32_t set, uint32_t way, ui
         if (isInstruction){
             l2_rrpv[set][way] = 0;
         }
-        else if (type != WRITEBACK && type != PREFETCH && l2_rrpv[set][way] > 0){
+        else if (type != WRITEBACK && type != PREFETCH && l2_rrpv[set][way] > 0) {
             l2_rrpv[set][way]--; // for data, gradually promote it, but don't promote writeback hits, because they don't signal reuse really
         }
     }
     else{
         if (isInstruction){
-            l2_rrpv[set][way] = maxRRPV - 2; // gives more leeway for instructions
+            l2_rrpv[set][way] = maxRRPV - 1; 
         }
-        else if (type == WRITEBACK || type == PREFETCH){
-            l2_rrpv[set][way] = maxRRPV; // only data is written back, and this is slightly deprioritizing data more
-        }
-        else{
-            l2_rrpv[set][way] = maxRRPV - 1;  //insert with RRPV2
+        else {
+            l2_rrpv[set][way] = maxRRPV;  
         }
     }
 }
@@ -152,17 +148,16 @@ uint32_t CACHE::l2c_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, c
 
 void CACHE::l2c_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit, uint8_t isInstruction)
 {
-    if ((type == WRITEBACK) && ip)
-        assert(0);
-
     if (is_leader(set)) {
         update_ratio(type, hit, isInstruction);
         update_replacement_state_rrip(set, way, type, hit);
-    }
-    else if (use_irrip)
+    } 
+    else if (use_irrip) {
         update_replacement_state_irrip(set, way, type, hit, isInstruction);
-    else
+    } 
+    else {
         update_replacement_state_rrip(set, way, type, hit);
+    }
 }
 
 void CACHE::l2c_replacement_final_stats()
