@@ -1,0 +1,23 @@
+{
+  "current_spp_sha256": "b7274f43aeb41f42d58cc4c6718994ebe76d86315a3c6027b3dc10a5aef4f853",
+  "current_matches_rerun_control": true,
+  "rerun_counts_match_previous_report": true,
+  "warmup_instructions": 25000000,
+  "simulation_instructions": 25000000,
+  "compiler": "g++-7",
+  "plot_library": "matplotlib",
+  "accuracy": "useful / lower-level prefetch requests",
+  "feedback_accuracy": "delta useful / delta(useful + useless)",
+  "history": "Older degree, confidence and controller sweeps use earlier SPP versions.",
+  "logs": [
+    "results/full-25m/Trace1-001-baseline.log",
+    "results/full-25m/Trace1-001-ip-stride.log",
+    "results/distance-25m/Trace1-001-control.log",
+    "results/full-25m/Trace2-003-baseline.log",
+    "results/full-25m/Trace2-003-ip-stride.log",
+    "results/distance-25m/Trace2-003-control.log",
+    "results/full-25m/Trace3-002-baseline.log",
+    "results/full-25m/Trace3-002-ip-stride.log",
+    "results/distance-25m/Trace3-002-control.log"
+  ]
+}

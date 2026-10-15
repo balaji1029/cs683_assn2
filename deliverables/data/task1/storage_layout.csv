@@ -1,0 +1,12 @@
+field,offset_bytes,size_bytes,bits
+valid,0,1,8
+ip,1,1,8
+last_cl_addr,8,8,64
+stride_array,16,128,1024
+curr_index,144,1,8
+size,145,1,8
+last_stride,152,8,64
+num_iterations,160,2,16
+confidence,162,1,8
+non_uniform_confidence,163,1,8
+lru,164,4,32
