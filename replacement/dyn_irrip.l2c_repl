@@ -4,7 +4,7 @@
 #define maxRRPV 3
 uint32_t l2_rrpv[L2C_SET][L2C_WAY];
 
-#define NUM_LEADERS 32
+#define NUM_LEADERS 16
 #define LEADER_STRIDE (L2C_SET / NUM_LEADERS)
 #define DECISION_INTERVAL 8192
 #define INSTR_THRESH 0.3
