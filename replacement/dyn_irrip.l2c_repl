@@ -6,8 +6,8 @@ uint32_t l2_rrpv[L2C_SET][L2C_WAY];
 
 #define NUM_LEADERS 16
 #define LEADER_STRIDE (L2C_SET / NUM_LEADERS)
-#define DECISION_INTERVAL 8192
-#define INSTR_THRESH 0.3
+#define DECISION_INTERVAL 4096
+#define INSTR_THRESH 0.35
 
 static inline bool is_leader(uint32_t set) { 
     return (set % LEADER_STRIDE == 0);
