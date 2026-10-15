@@ -121,5 +121,5 @@ ITLB Replacement: lru
 DTLB Replacement: lru
 STLB Replacement: lru
 Cores: 1
-Binary: bin/hashed_perceptron-no-spp-no-no-no-no-no-lru-lru-lru-dyn_irrip-lru-lru-lru-lru-1core-task3_results
+Binary: bin/hashed_perceptron-no-spp-no-no-no-no-no-lru-lru-lru-dyn_irrip-lru-lru-lru-lru-1core-leaders16
 
