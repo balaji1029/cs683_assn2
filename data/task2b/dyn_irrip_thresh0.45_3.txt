@@ -17,15 +17,15 @@ L1I has LRU replacement policy
 L1D has LRU replacement policy
 Initialize dynamic iRRIP state for L2C
 LLC has LRU replacement policy
-Heartbeat CPU 0 instructions: 10000000 cycles: 3015559 heartbeat IPC: 3.31613 cumulative IPC: 3.31613 (Simulation time: 0 hr 0 min 20 sec) 
-Heartbeat CPU 0 instructions: 20000000 cycles: 6013254 heartbeat IPC: 3.3359 cumulative IPC: 3.32599 (Simulation time: 0 hr 0 min 40 sec) 
+Heartbeat CPU 0 instructions: 10000000 cycles: 3015559 heartbeat IPC: 3.31613 cumulative IPC: 3.31613 (Simulation time: 0 hr 0 min 36 sec) 
+Heartbeat CPU 0 instructions: 20000000 cycles: 6013254 heartbeat IPC: 3.3359 cumulative IPC: 3.32599 (Simulation time: 0 hr 1 min 14 sec) 
 
-Warmup complete CPU 0 instructions: 25000002 cycles: 7506772 (Simulation time: 0 hr 0 min 51 sec) 
+Warmup complete CPU 0 instructions: 25000002 cycles: 7506772 (Simulation time: 0 hr 1 min 31 sec) 
 
-Heartbeat CPU 0 instructions: 30000000 cycles: 22125144 heartbeat IPC: 0.62066 cumulative IPC: 0.342035 (Simulation time: 0 hr 1 min 5 sec) 
-Heartbeat CPU 0 instructions: 40000003 cycles: 48124219 heartbeat IPC: 0.384629 cumulative IPC: 0.369299 (Simulation time: 0 hr 1 min 32 sec) 
-Heartbeat CPU 0 instructions: 50000000 cycles: 73036398 heartbeat IPC: 0.40141 cumulative IPC: 0.381507 (Simulation time: 0 hr 2 min 0 sec) 
-Finished CPU 0 instructions: 25000001 cycles: 65529627 cumulative IPC: 0.381507 (Simulation time: 0 hr 2 min 0 sec) 
+Heartbeat CPU 0 instructions: 30000000 cycles: 22125144 heartbeat IPC: 0.62066 cumulative IPC: 0.342035 (Simulation time: 0 hr 1 min 56 sec) 
+Heartbeat CPU 0 instructions: 40000003 cycles: 48124219 heartbeat IPC: 0.384629 cumulative IPC: 0.369299 (Simulation time: 0 hr 2 min 41 sec) 
+Heartbeat CPU 0 instructions: 50000000 cycles: 73036398 heartbeat IPC: 0.40141 cumulative IPC: 0.381507 (Simulation time: 0 hr 3 min 24 sec) 
+Finished CPU 0 instructions: 25000001 cycles: 65529627 cumulative IPC: 0.381507 (Simulation time: 0 hr 3 min 24 sec) 
 
 ChampSim completed all CPUs
 

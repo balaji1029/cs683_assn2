@@ -1,16 +1,19 @@
 # L2C replacement policy comparison (25M warmup + 25M sim)
 
-| Trace | Policy | IPC | Speedup vs LRU | L2C Load MPKI | L2C Instr. Load MPKI | L2C Data Load MPKI | Normalized L2C Load MPKI | L2C Load MPKI Reduction vs LRU (%) |
+| Trace | Policy | IPC | Speedup vs LRU | L2C Load MPKI | L2C Instr. Load MPKI | L2C Data Load MPKI | Normalized L2C Load MPKI (LRU = 1) | L2C Load MPKI Reduction vs LRU (%) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | Trace1 | LRU | 0.2318 | 1.0000 | 17.745 | 10.389 | 7.356 | 1.0000 | 0.00 |
 | Trace1 | SRRIP | 0.2318 | 0.9998 | 17.664 | 10.581 | 7.083 | 0.9954 | 0.46 |
 | Trace1 | iRRIP-Moderate | 0.2318 | 0.9999 | 17.550 | 10.032 | 7.517 | 0.9890 | 1.10 |
-| Trace1 | iRRIP | 0.2328 | 1.0040 | 18.278 | 9.327 | 8.951 | 1.0300 | -3.00 |
+| Trace1 | iRRIP (old) | 0.2319 | 1.0001 | 17.689 | 9.744 | 7.944 | 0.9968 | 0.32 |
+| Trace1 | iRRIP (new) | 0.2323 | 1.0020 | 18.281 | 9.346 | 8.935 | 1.0302 | -3.02 |
 | Trace2 | LRU | 0.2503 | 1.0000 | 28.164 | 19.626 | 8.538 | 1.0000 | 0.00 |
 | Trace2 | SRRIP | 0.2513 | 1.0039 | 26.419 | 18.460 | 7.959 | 0.9381 | 6.19 |
 | Trace2 | iRRIP-Moderate | 0.2546 | 1.0171 | 23.978 | 15.136 | 8.842 | 0.8514 | 14.86 |
-| Trace2 | iRRIP | 0.2611 | 1.0431 | 19.367 | 8.863 | 10.504 | 0.6876 | 31.24 |
+| Trace2 | iRRIP (old) | 0.2566 | 1.0250 | 21.918 | 12.754 | 9.163 | 0.7782 | 22.18 |
+| Trace2 | iRRIP (new) | 0.2593 | 1.0357 | 20.957 | 10.531 | 10.427 | 0.7441 | 25.59 |
 | Trace3 | LRU | 0.3818 | 1.0000 | 3.949 | 1.119 | 2.831 | 1.0000 | 0.00 |
 | Trace3 | SRRIP | 0.3815 | 0.9992 | 4.033 | 1.192 | 2.842 | 1.0212 | -2.12 |
 | Trace3 | iRRIP-Moderate | 0.3817 | 0.9998 | 3.943 | 1.069 | 2.873 | 0.9983 | 0.17 |
-| Trace3 | iRRIP | 0.3825 | 1.0017 | 3.949 | 0.849 | 3.100 | 1.0000 | -0.00 |
+| Trace3 | iRRIP (old) | 0.3820 | 1.0005 | 3.818 | 0.949 | 2.869 | 0.9668 | 3.32 |
+| Trace3 | iRRIP (new) | 0.3823 | 1.0012 | 3.951 | 0.849 | 3.101 | 1.0003 | -0.03 |

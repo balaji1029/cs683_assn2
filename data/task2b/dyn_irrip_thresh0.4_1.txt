@@ -17,15 +17,15 @@ L1I has LRU replacement policy
 L1D has LRU replacement policy
 Initialize dynamic iRRIP state for L2C
 LLC has LRU replacement policy
-Heartbeat CPU 0 instructions: 10000002 cycles: 2953691 heartbeat IPC: 3.3856 cumulative IPC: 3.3856 (Simulation time: 0 hr 0 min 18 sec) 
-Heartbeat CPU 0 instructions: 20000001 cycles: 5914936 heartbeat IPC: 3.37696 cumulative IPC: 3.38127 (Simulation time: 0 hr 0 min 37 sec) 
+Heartbeat CPU 0 instructions: 10000002 cycles: 2953691 heartbeat IPC: 3.3856 cumulative IPC: 3.3856 (Simulation time: 0 hr 0 min 36 sec) 
+Heartbeat CPU 0 instructions: 20000001 cycles: 5914936 heartbeat IPC: 3.37696 cumulative IPC: 3.38127 (Simulation time: 0 hr 1 min 11 sec) 
 
-Warmup complete CPU 0 instructions: 25000004 cycles: 7349301 (Simulation time: 0 hr 0 min 46 sec) 
+Warmup complete CPU 0 instructions: 25000004 cycles: 7349301 (Simulation time: 0 hr 1 min 28 sec) 
 
-Heartbeat CPU 0 instructions: 30000003 cycles: 31308290 heartbeat IPC: 0.393804 cumulative IPC: 0.20869 (Simulation time: 0 hr 1 min 1 sec) 
-Heartbeat CPU 0 instructions: 40000000 cycles: 71867365 heartbeat IPC: 0.246554 cumulative IPC: 0.232493 (Simulation time: 0 hr 1 min 31 sec) 
-Heartbeat CPU 0 instructions: 50000000 cycles: 115206070 heartbeat IPC: 0.230741 cumulative IPC: 0.231789 (Simulation time: 0 hr 2 min 3 sec) 
-Finished CPU 0 instructions: 25000000 cycles: 107856773 cumulative IPC: 0.231789 (Simulation time: 0 hr 2 min 3 sec) 
+Heartbeat CPU 0 instructions: 30000003 cycles: 31308290 heartbeat IPC: 0.393804 cumulative IPC: 0.20869 (Simulation time: 0 hr 1 min 54 sec) 
+Heartbeat CPU 0 instructions: 40000000 cycles: 71867365 heartbeat IPC: 0.246554 cumulative IPC: 0.232493 (Simulation time: 0 hr 2 min 42 sec) 
+Heartbeat CPU 0 instructions: 50000000 cycles: 115206070 heartbeat IPC: 0.230741 cumulative IPC: 0.231789 (Simulation time: 0 hr 3 min 31 sec) 
+Finished CPU 0 instructions: 25000000 cycles: 107856773 cumulative IPC: 0.231789 (Simulation time: 0 hr 3 min 31 sec) 
 
 ChampSim completed all CPUs
 
